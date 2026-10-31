@@ -88,17 +88,3 @@ docker compose up --build
 ```
 The application will be accessible at `http://localhost:8080`.
 Prometheus metrics will be available at `http://localhost:8080/actuator/prometheus`.
-
----
-
-## 6. Implementation Roadmap & Phases
-
-- [x] **Phase 0**: Setup (Spring Boot skeleton, package layout, Dockerfile, docker-compose.yml, README stub)
-- [x] **Phase 1**: Core domain & physics (Two-part piecewise linear charging curve, traffic/AC consumption model, Haversine, Tariffs)
-- [ ] **Phase 2**: Independent Plan Validator (Floor breach, charger overbooking, window infeasibility, continuity)
-- [ ] **Phase 3**: Heuristic Solver (Greedy construction, charger interval timeline, time-boxed local search, lower bound)
-- [ ] **Phase 4**: Incremental Re-planner (Battery drift strategy, charger failure strategy, assignment diffing, `< 2 s` target)
-- [ ] **Phase 5**: REST APIs & Persistence (Fleet ingestion, solve endpoint, re-plan endpoints, JPA entities, idempotent event handling)
-- [ ] **Phase 6**: Observability & Caching (Caffeine cache, Micrometer metrics, structured MDC JSON logging)
-- [ ] **Phase 7**: End-to-end tests & 300/40/1500 benchmark runner
-- [ ] **Phase 8**: Complete documentation & DESIGN.md

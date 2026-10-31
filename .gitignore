@@ -33,3 +33,5 @@ target/
 Thumbs.db
 
 case_study_6_design_plan.pdf
+.postman/
+postman/

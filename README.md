@@ -113,3 +113,12 @@ docker compose up --build
 ```
 The application will be accessible at `http://localhost:8080`.
 Prometheus metrics will be available at `http://localhost:8080/actuator/prometheus`.
+
+---
+
+## 7. Documentation & Demonstration Artifacts
+
+- **System Design Note**: Detailed in [`DESIGN.md`](./DESIGN.md) covering the system architecture diagram, battery drift sequence diagram, 7-point failure-mode recovery table, and complexity scaling analysis.
+- **Postman API Collection**: Pre-configured collection exportable in [`voltsync_postman_collection.json`](./voltsync_postman_collection.json) with automated plan ID capturing scripts.
+- **cURL Demo Script**: Interactive shell walkthrough in [`scripts/demo_curl.sh`](./scripts/demo_curl.sh).
+

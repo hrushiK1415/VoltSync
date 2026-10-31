@@ -125,6 +125,22 @@
       "item": [
         {
           "name": "Solve Shift Plan (Greedy + 2-Opt)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.planId) {",
+                  "        pm.collectionVariables.set('planId', json.planId);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [

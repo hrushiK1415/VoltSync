@@ -66,27 +66,22 @@ public class ChargerTimeline {
             }
 
             List<Reservation> resList = chargerReservations.getOrDefault(charger.getId(), Collections.emptyList());
-
-            // Scan gaps between reservations
             Instant windowStart = earliestStart;
 
             for (Reservation res : resList) {
                 if (res.end().isBefore(windowStart)) {
-                    continue; // reservation already in the past
+                    continue;
                 }
-
                 if (res.start().isAfter(latestEnd)) {
-                    break; // all further reservations are after our search window
+                    break;
                 }
 
-                // Check gap between windowStart and res.start()
                 Instant gapEnd = res.start().isBefore(latestEnd) ? res.start() : latestEnd;
                 if (Duration.between(windowStart, gapEnd).toSeconds() >= durationSeconds) {
                     Instant slotEnd = windowStart.plusSeconds(durationSeconds);
                     feasibleSlots.add(new AvailableSlot(hub.getId(), charger.getId(), windowStart, slotEnd, charger.getPowerKW()));
                 }
 
-                // Advance window start past this reservation
                 if (res.end().isAfter(windowStart)) {
                     windowStart = res.end();
                 }
@@ -95,7 +90,6 @@ public class ChargerTimeline {
                 }
             }
 
-            // Check trailing gap after last reservation up to latestEnd
             if (windowStart.isBefore(latestEnd) && Duration.between(windowStart, latestEnd).toSeconds() >= durationSeconds) {
                 Instant slotEnd = windowStart.plusSeconds(durationSeconds);
                 feasibleSlots.add(new AvailableSlot(hub.getId(), charger.getId(), windowStart, slotEnd, charger.getPowerKW()));
@@ -106,7 +100,7 @@ public class ChargerTimeline {
             return Optional.empty();
         }
 
-        // Score slots: prefer off-peak tariff cost, then earliest start
+        // Rank candidate slots: lowest tariff cost first (favoring off-peak intervals), with earliest start as tie-breaker
         feasibleSlots.sort((s1, s2) -> {
             double cost1 = tariff.calculateCost(s1.start(), s1.end(), 1.0);
             double cost2 = tariff.calculateCost(s2.start(), s2.end(), 1.0);
@@ -124,7 +118,6 @@ public class ChargerTimeline {
     public synchronized void book(Reservation reservation) {
         List<Reservation> list = chargerReservations.computeIfAbsent(reservation.chargerId(), k -> new ArrayList<>());
 
-        // Verify non-overlap
         for (Reservation existing : list) {
             if (reservation.start().isBefore(existing.end()) && existing.start().isBefore(reservation.end())) {
                 throw new IllegalStateException("Double-booking conflict on charger " + reservation.chargerId() +

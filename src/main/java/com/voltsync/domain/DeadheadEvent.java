@@ -1,5 +1,8 @@
 package com.voltsync.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.Instant;
 import java.util.Objects;
 
@@ -11,11 +14,16 @@ public class DeadheadEvent extends Event {
     private final double energyUsedKWh;
     private final DeadheadPurpose purpose;
 
-    public DeadheadEvent(Instant startTime, Instant endTime,
-                         GeoLocation startLocation, GeoLocation endLocation,
-                         double distanceKm, double energyUsedKWh,
-                         DeadheadPurpose purpose,
-                         double socBefore, double socAfter) {
+    @JsonCreator
+    public DeadheadEvent(@JsonProperty("startTime") Instant startTime,
+                         @JsonProperty("endTime") Instant endTime,
+                         @JsonProperty("startLocation") GeoLocation startLocation,
+                         @JsonProperty("endLocation") GeoLocation endLocation,
+                         @JsonProperty("distanceKm") double distanceKm,
+                         @JsonProperty("energyUsedKWh") double energyUsedKWh,
+                         @JsonProperty("purpose") DeadheadPurpose purpose,
+                         @JsonProperty("socBefore") double socBefore,
+                         @JsonProperty("socAfter") double socAfter) {
         super(EventType.DEADHEAD, startTime, endTime, startLocation, endLocation, socBefore, socAfter);
         this.distanceKm = distanceKm;
         this.energyUsedKWh = energyUsedKWh;

@@ -1,5 +1,8 @@
 package com.voltsync.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.Instant;
 import java.util.Objects;
 
@@ -14,13 +17,19 @@ public class ChargeEvent extends Event {
     private final double cost;
     private final double energyAddedKWh;
 
-    public ChargeEvent(String hubId, String chargerId,
-                       Instant startTime, Instant endTime,
-                       GeoLocation hubLocation,
-                       double socFrom, double socTo,
-                       double cost, double energyAddedKWh,
-                       double socBefore, double socAfter) {
-        super(EventType.CHARGE, startTime, endTime, hubLocation, hubLocation, socBefore, socAfter);
+    @JsonCreator
+    public ChargeEvent(@JsonProperty("hubId") String hubId,
+                       @JsonProperty("chargerId") String chargerId,
+                       @JsonProperty("startTime") Instant startTime,
+                       @JsonProperty("endTime") Instant endTime,
+                       @JsonProperty("startLocation") GeoLocation startLocation,
+                       @JsonProperty("socFrom") double socFrom,
+                       @JsonProperty("socTo") double socTo,
+                       @JsonProperty("cost") double cost,
+                       @JsonProperty("energyAddedKWh") double energyAddedKWh,
+                       @JsonProperty("socBefore") double socBefore,
+                       @JsonProperty("socAfter") double socAfter) {
+        super(EventType.CHARGE, startTime, endTime, startLocation, startLocation, socBefore, socAfter);
         this.hubId = Objects.requireNonNull(hubId, "hubId must not be null");
         this.chargerId = Objects.requireNonNull(chargerId, "chargerId must not be null");
         this.socFrom = socFrom;

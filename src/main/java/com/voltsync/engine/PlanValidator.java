@@ -35,13 +35,8 @@ public class PlanValidator {
 
         List<ValidationViolation> violations = new ArrayList<>();
 
-        // 1. Vehicle-level checks: battery floor, event continuity, timing, non-overlap
         validateVehicleSchedules(plan, vehicleMap, tripMap, violations);
-
-        // 2. Hub-level checks: sweep-line charger capacity and stall conflicts
         validateChargerCapacities(plan, hubMap, violations);
-
-        // 3. Trip-level checks: completeness and exclusivity (assigned vs unassigned)
         validateTripAssignments(plan, tripMap, violations);
 
         boolean isValid = violations.isEmpty();
@@ -75,21 +70,19 @@ public class PlanValidator {
             for (int i = 0; i < events.size(); i++) {
                 Event event = events.get(i);
 
-                // Timing validity
                 if (event.getEndTime().isBefore(event.getStartTime())) {
                     violations.add(new ValidationViolation("INVALID_EVENT_DURATION",
                             "Event " + i + " ends before it starts: " + event.getStartTime() + " -> " + event.getEndTime(),
                             vehicleId, event.getStartTime()));
                 }
 
-                // Overlapping events
                 if (lastEndTime != null && event.getStartTime().isBefore(lastEndTime)) {
                     violations.add(new ValidationViolation("OVERLAPPING_EVENTS",
                             "Event " + i + " starts at " + event.getStartTime() + " before previous event ended at " + lastEndTime,
                             vehicleId, event.getStartTime()));
                 }
 
-                // Spatial continuity: cab must be at the event's start location
+                // Verify spatial continuity: cab cannot teleport between distinct coordinates without a deadhead
                 double distFromPrev = currentLocation.haversineDistanceKm(event.getStartLocation());
                 if (distFromPrev > LOCATION_TOLERANCE_KM) {
                     violations.add(new ValidationViolation("LOCATION_DISCONTINUITY",
@@ -98,7 +91,6 @@ public class PlanValidator {
                             vehicleId, event.getStartTime()));
                 }
 
-                // Hard Rule 1: Battery floor before event execution
                 if (currentSoc < (BATTERY_FLOOR_PERCENT - EPSILON)) {
                     violations.add(new ValidationViolation("FLOOR_BREACH",
                             "Vehicle SoC dropped to " + String.format("%.2f", currentSoc) + "% at start of event " + i +
@@ -106,10 +98,8 @@ public class PlanValidator {
                             vehicleId, event.getStartTime()));
                 }
 
-                // Apply event to SoC
                 double socAfter = event.applySoc(currentSoc, batteryKWh);
 
-                // Hard Rule 1: Battery floor after event execution
                 if (socAfter < (BATTERY_FLOOR_PERCENT - EPSILON)) {
                     violations.add(new ValidationViolation("FLOOR_BREACH",
                             "Vehicle SoC dropped to " + String.format("%.2f", socAfter) + "% after event " + i +
@@ -117,14 +107,12 @@ public class PlanValidator {
                             vehicleId, event.getEndTime()));
                 }
 
-                // Trip-specific constraints: start on time, finish before latestFinish
                 if (event instanceof TripEvent tripEvent) {
                     Trip trip = tripMap.get(tripEvent.getTripId());
                     if (trip == null) {
                         violations.add(new ValidationViolation("UNKNOWN_TRIP_ASSIGNED",
                                 "Trip " + tripEvent.getTripId() + " in schedule not found in input trips", vehicleId, tripEvent.getStartTime()));
                     } else {
-                        // Hard Rule 3: Trip timing
                         if (!tripEvent.getStartTime().equals(trip.getStartTime())) {
                             violations.add(new ValidationViolation("TRIP_NOT_ON_TIME",
                                     "Trip " + trip.getId() + " must start on time at " + trip.getStartTime() +
@@ -166,7 +154,6 @@ public class PlanValidator {
             }
         }
 
-        // Check each hub capacity via sweep-line
         for (Map.Entry<String, List<ChargeEvent>> entry : hubChargeEvents.entrySet()) {
             String hubId = entry.getKey();
             List<ChargeEvent> sessions = entry.getValue();
@@ -178,14 +165,14 @@ public class PlanValidator {
                 continue;
             }
 
-            // Build sweep-line points
             List<SweepPoint> points = new ArrayList<>();
             for (ChargeEvent session : sessions) {
                 points.add(new SweepPoint(session.getStartTime(), +1, session));
                 points.add(new SweepPoint(session.getEndTime(), -1, session));
             }
 
-            // Sort: earliest timestamp first; if equal, END (-1) before START (+1)
+            // Sweep-line ordering: earliest timestamp first; on exact tie, departures (delta -1)
+            // precede arrivals (+1) so leaving vehicles free stalls at that exact instant
             points.sort((a, b) -> {
                 int cmp = a.time.compareTo(b.time);
                 if (cmp != 0) return cmp;
@@ -203,17 +190,15 @@ public class PlanValidator {
                                     ": " + currentConcurrent + " concurrent charging sessions but only " +
                                     maxChargersUp + " chargers UP",
                             hubId, sp.time));
-                    break; // report once per hub to keep report concise
+                    break;
                 }
             }
         }
 
-        // Verify that individual physical chargers are UP and not double-booked
         for (Map.Entry<String, List<ChargeEvent>> entry : chargerStallEvents.entrySet()) {
             String chargerId = entry.getKey();
             List<ChargeEvent> sessions = entry.getValue();
 
-            // Check that the charger is UP
             for (ChargeEvent session : sessions) {
                 Hub hub = hubMap.get(session.getHubId());
                 if (hub != null) {
@@ -230,7 +215,6 @@ public class PlanValidator {
                 }
             }
 
-            // Check no overlapping sessions on the same charger stall
             sessions.sort(Comparator.comparing(Event::getStartTime));
             for (int i = 0; i < sessions.size() - 1; i++) {
                 ChargeEvent s1 = sessions.get(i);
@@ -258,7 +242,6 @@ public class PlanValidator {
             }
         }
 
-        // Check for duplicate assignments
         for (Map.Entry<String, Integer> entry : assignedTripCounts.entrySet()) {
             if (entry.getValue() > 1) {
                 violations.add(new ValidationViolation("DUPLICATE_TRIP_ASSIGNMENT",
@@ -281,7 +264,6 @@ public class PlanValidator {
             unassignedTripIds.add(tripId);
         }
 
-        // Completeness: Every input trip must be either assigned or unassigned
         for (String tripId : tripMap.keySet()) {
             boolean isAssigned = assignedTripCounts.containsKey(tripId);
             boolean isUnassigned = unassignedTripIds.contains(tripId);

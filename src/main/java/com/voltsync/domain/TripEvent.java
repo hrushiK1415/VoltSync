@@ -1,5 +1,8 @@
 package com.voltsync.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.Instant;
 import java.util.Objects;
 
@@ -11,10 +14,16 @@ public class TripEvent extends Event {
     private final double distanceKm;
     private final double energyUsedKWh;
 
-    public TripEvent(String tripId, Instant startTime, Instant endTime,
-                     GeoLocation startLocation, GeoLocation endLocation,
-                     double distanceKm, double energyUsedKWh,
-                     double socBefore, double socAfter) {
+    @JsonCreator
+    public TripEvent(@JsonProperty("tripId") String tripId,
+                     @JsonProperty("startTime") Instant startTime,
+                     @JsonProperty("endTime") Instant endTime,
+                     @JsonProperty("startLocation") GeoLocation startLocation,
+                     @JsonProperty("endLocation") GeoLocation endLocation,
+                     @JsonProperty("distanceKm") double distanceKm,
+                     @JsonProperty("energyUsedKWh") double energyUsedKWh,
+                     @JsonProperty("socBefore") double socBefore,
+                     @JsonProperty("socAfter") double socAfter) {
         super(EventType.TRIP, startTime, endTime, startLocation, endLocation, socBefore, socAfter);
         this.tripId = Objects.requireNonNull(tripId, "tripId must not be null");
         this.distanceKm = distanceKm;

@@ -69,7 +69,7 @@ public class BatteryDriftStrategy implements ReplanStrategy {
         List<ChargeEvent> newlyScheduledCharges = new ArrayList<>();
         List<ChargeEvent> canceledCharges = new ArrayList<>();
 
-        // 1. Simulate forward from actualSoc at atTime
+        // Step 1: Forward simulate from reported SoC to detect battery floor breach (<15%)
         double currentSoc = actualSoc;
         double batteryKWh = vehicle.getBatteryKWh();
         GeoLocation currentLoc = pastEvents.isEmpty() ? vehicle.getLocation() : pastEvents.get(pastEvents.size() - 1).getEndLocation();
@@ -98,7 +98,6 @@ public class BatteryDriftStrategy implements ReplanStrategy {
         }
 
         if (violationIndex == -1) {
-            // No violation occurs: simple state update
             List<Event> updatedEvents = new ArrayList<>(pastEvents);
             updatedEvents.addAll(futureEvents);
             newSchedules.put(vehicleId, updatedEvents);
@@ -109,16 +108,13 @@ public class BatteryDriftStrategy implements ReplanStrategy {
             return new ReplanResult(plan, diff, vr);
         }
 
-        // Violation occurs!
         modifiedVehicles.add(vehicleId);
 
-        // Keep valid events before violation
         List<Event> keptEvents = new ArrayList<>(pastEvents);
         for (int i = 0; i < violationIndex; i++) {
             keptEvents.add(futureEvents.get(i));
         }
 
-        // Collect dropped events from violation index onward
         List<Trip> droppedTrips = new ArrayList<>();
         for (int i = violationIndex; i < futureEvents.size(); i++) {
             Event e = futureEvents.get(i);
@@ -133,7 +129,6 @@ public class BatteryDriftStrategy implements ReplanStrategy {
             }
         }
 
-        // Compute cab state at the end of kept events
         if (!keptEvents.isEmpty()) {
             Event lastKept = keptEvents.get(keptEvents.size() - 1);
             currentLoc = lastKept.getEndLocation();
@@ -145,7 +140,7 @@ public class BatteryDriftStrategy implements ReplanStrategy {
             currentSoc = actualSoc;
         }
 
-        // Recovery (a): Try to insert a charge session for vehicleId and recover dropped trips
+        // Step 2: Attempt local charge insertion at nearest hub to retain original driver assignment
         Hub nearestHub = findNearestHub(currentLoc, context.hubs());
         if (nearestHub != null && !droppedTrips.isEmpty()) {
             double dhToHubDist = currentLoc.drivingDistanceKm(nearestHub.getLocation());
@@ -156,7 +151,6 @@ public class BatteryDriftStrategy implements ReplanStrategy {
             double socAtHub = currentSoc - (eDh / batteryKWh) * 100.0;
 
             if (socAtHub >= PlanValidator.BATTERY_FLOOR_PERCENT) {
-                // Determine target trip
                 Trip candidateTrip = droppedTrips.get(0);
                 double dhHubToTrip = nearestHub.getLocation().drivingDistanceKm(candidateTrip.getStartLoc());
                 Duration dhHubToTripDur = context.model().travelDuration(dhHubToTrip, candidateTrip.getStartTime());
@@ -173,7 +167,6 @@ public class BatteryDriftStrategy implements ReplanStrategy {
 
                         if (slotOpt.isPresent()) {
                             ChargerTimeline.AvailableSlot slot = slotOpt.get();
-                            // Deadhead to hub
                             if (dhToHubDist > PlanValidator.LOCATION_TOLERANCE_KM) {
                                 keptEvents.add(new DeadheadEvent(
                                         availableTime, arriveHub, currentLoc, nearestHub.getLocation(),
@@ -181,7 +174,6 @@ public class BatteryDriftStrategy implements ReplanStrategy {
                                 ));
                             }
 
-                            // Charge session
                             Instant chargeStart = slot.start();
                             Instant chargeEnd = chargeStart.plus(chargeDur);
                             double energyAdded = ChargingCurve.energyAddedKWh(socAtHub, targetSoc, batteryKWh);
@@ -197,7 +189,6 @@ public class BatteryDriftStrategy implements ReplanStrategy {
                                     nearestHub.getId(), slot.chargerId(), vehicleId, chargeStart, chargeEnd
                             ));
 
-                            // Deadhead to candidate trip
                             Instant dhStart = candidateTrip.getStartTime().minus(dhHubToTripDur);
                             if (dhStart.isBefore(chargeEnd)) {
                                 dhStart = chargeEnd;
@@ -212,7 +203,6 @@ public class BatteryDriftStrategy implements ReplanStrategy {
                                 ));
                             }
 
-                            // Retain candidate trip
                             double eTrip = context.model().calculateEnergy(candidateTrip.getDistanceKm(), candidateTrip.getStartTime());
                             Duration tripDur = context.model().travelDuration(candidateTrip.getDistanceKm(), candidateTrip.getStartTime());
                             Instant tripEnd = candidateTrip.getStartTime().plus(tripDur);
@@ -233,7 +223,7 @@ public class BatteryDriftStrategy implements ReplanStrategy {
 
         newSchedules.put(vehicleId, keptEvents);
 
-        // Recovery (b): Reassign remaining dropped trips to other cabs via greedy insertion
+        // Step 3: Greedy reassignment of remaining dropped trips to idle cabs before marking unassigned
         for (Trip trip : droppedTrips) {
             boolean reassigned = false;
 
@@ -244,7 +234,6 @@ public class BatteryDriftStrategy implements ReplanStrategy {
                 Vehicle candidateCab = vehicleMap.get(candidateCabId);
                 List<Event> events = entry.getValue();
 
-                // Check if candidate cab can take trip at the end of its schedule
                 GeoLocation cabEndLoc = events.isEmpty() ? candidateCab.getLocation() : events.get(events.size() - 1).getEndLocation();
                 Instant cabEndTime = events.isEmpty() ? atTime : events.get(events.size() - 1).getEndTime();
                 double cabSoc = events.isEmpty() ? candidateCab.getSocPct() : events.get(events.size() - 1).getSocAfter();
@@ -263,7 +252,6 @@ public class BatteryDriftStrategy implements ReplanStrategy {
                     double socDrop = (totalE / candidateCab.getBatteryKWh()) * 100.0;
 
                     if (cabSoc - socDrop >= PlanValidator.BATTERY_FLOOR_PERCENT && !tripEnd.isAfter(trip.getLatestFinish())) {
-                        // Insert deadhead and trip
                         Instant dhStart = trip.getStartTime().minus(dhDur);
                         if (dhStart.isBefore(cabEndTime)) {
                             dhStart = cabEndTime;
@@ -298,7 +286,6 @@ public class BatteryDriftStrategy implements ReplanStrategy {
             }
         }
 
-        // Compute total cost of new schedules
         double newCost = 0.0;
         for (List<Event> evList : newSchedules.values()) {
             for (Event e : evList) {

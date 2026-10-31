@@ -15,7 +15,6 @@ public final class ChargingCurve {
     public static final double TAPER_POWER_FACTOR = 0.30;
 
     private ChargingCurve() {
-        // Utility class
     }
 
     /**
@@ -96,7 +95,6 @@ public final class ChargingCurve {
                 double deltaSoc = (remainingHours * 100.0 * powerFast) / batteryKWh;
                 return Math.min(SOC_KNEE_PCT, currentSoc + deltaSoc);
             }
-            // Reached knee
             currentSoc = SOC_KNEE_PCT;
             remainingHours -= hoursToKnee;
         }

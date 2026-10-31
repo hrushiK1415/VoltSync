@@ -66,9 +66,7 @@ class PlanValidatorTest {
         Instant t0830 = Instant.parse("2026-10-31T08:30:00Z");
         Instant t0850 = Instant.parse("2026-10-31T08:50:00Z");
 
-        // Cab1 does trip1 (starts at depot, ends at locA)
         TripEvent e1 = new TripEvent("TRIP1", t0800, t0820, locDepot, locA, 5.0, 1.0, 80.0, 78.33);
-        // Cab1 does trip2 (starts at locA, ends at locB)
         TripEvent e2 = new TripEvent("TRIP2", t0830, t0850, locA, locB, 3.0, 0.6, 78.33, 77.33);
 
         Map<String, List<Event>> schedules = new HashMap<>();
@@ -76,7 +74,6 @@ class PlanValidatorTest {
         schedules.put("CAB2", Collections.emptyList());
         schedules.put("CAB3", Collections.emptyList());
 
-        // Trip 3 is unassigned with reason
         List<UnassignedTrip> unassigned = List.of(
                 new UnassignedTrip("TRIP3", UnassignedReason.NO_CAB_IN_TIME, "No cab in proximity")
         );

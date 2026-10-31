@@ -41,17 +41,15 @@ public class LowerBoundCalculator {
                 .orElse(60.0);
 
         for (Trip trip : trips) {
-            // Check individual feasibility
             Duration tripDuration = model.travelDuration(trip.getDistanceKm(), trip.getStartTime());
             Duration windowDuration = Duration.between(trip.getStartTime(), trip.getLatestFinish());
 
-            // 1. Time infeasibility: trip alone takes longer than available window
             if (tripDuration.compareTo(windowDuration) > 0) {
                 unassignedLB++;
                 continue;
             }
 
-            // 2. Energy infeasibility: trip energy alone exceeds max allowable usable battery (85% = 100% - 15% floor)
+            // Energy infeasibility: trip energy alone exceeds max allowable usable battery (85% = 100% - 15% floor)
             double tripEnergy = model.calculateEnergy(trip.getDistanceKm(), trip.getStartTime());
             double maxUsableEnergy = (100.0 - PlanValidator.BATTERY_FLOOR_PERCENT) / 100.0 * maxBatteryKWh;
 

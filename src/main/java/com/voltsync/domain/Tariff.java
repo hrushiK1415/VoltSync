@@ -81,7 +81,6 @@ public class Tariff {
                 next = end;
             }
             long step = Duration.between(cur, next).toSeconds();
-            // Check midpoint of step
             Instant midpoint = cur.plusSeconds(step / 2);
             if (isPeak(midpoint)) {
                 peakSeconds += step;

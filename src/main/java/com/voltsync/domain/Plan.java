@@ -1,5 +1,8 @@
 package com.voltsync.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.*;
 
 /**
@@ -14,11 +17,14 @@ public class Plan {
     private double lowerBound;
     private final Map<String, Object> stats;
 
-    public Plan(String planId, long version,
-                Map<String, List<Event>> cabSchedules,
-                List<UnassignedTrip> unassigned,
-                double cost, double lowerBound,
-                Map<String, Object> stats) {
+    @JsonCreator
+    public Plan(@JsonProperty("planId") String planId,
+                @JsonProperty("version") long version,
+                @JsonProperty("cabSchedules") Map<String, List<Event>> cabSchedules,
+                @JsonProperty("unassigned") List<UnassignedTrip> unassigned,
+                @JsonProperty("cost") double cost,
+                @JsonProperty("lowerBound") double lowerBound,
+                @JsonProperty("stats") Map<String, Object> stats) {
         this.planId = Objects.requireNonNull(planId, "planId must not be null");
         this.version = version;
         this.cabSchedules = cabSchedules != null ? new HashMap<>(cabSchedules) : new HashMap<>();

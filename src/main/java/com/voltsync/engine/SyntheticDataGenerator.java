@@ -27,7 +27,6 @@ public class SyntheticDataGenerator {
         GeoLocation cityCenter = new GeoLocation(12.9716, 77.5946);
         double cityRadiusKm = 18.0;
 
-        // 1. Generate Hubs with chargers totaling numChargers
         int chargersPerHub = 5;
         int numHubs = Math.max(1, (int) Math.ceil((double) numChargers / chargersPerHub));
 
@@ -48,20 +47,19 @@ public class SyntheticDataGenerator {
             hubs.add(new Hub("HUB" + h, "TENANT1", hubLoc, chargers));
         }
 
-        // 2. Generate Vehicles
         List<Vehicle> vehicles = new ArrayList<>();
         for (int v = 1; v <= numCabs; v++) {
             String cabId = "CAB-" + String.format("%03d", v);
             GeoLocation loc = randomLocation(rng, cityCenter, cityRadiusKm);
             double batteryKWh = (v % 3 == 0) ? 75.0 : 60.0;
-            double initialSoc = 25.0 + rng.nextDouble() * 20.0; // 25% to 45% initial SoC (demands mid-shift charging)
+            // 25% to 45% initial SoC forces mid-shift charging to test queueing and off-peak tariffs
+            double initialSoc = 25.0 + rng.nextDouble() * 20.0;
             double consumption = 0.18;
             Hub homeHub = hubs.get(rng.nextInt(hubs.size()));
 
             vehicles.add(new Vehicle(cabId, "TENANT1", batteryKWh, initialSoc, consumption, loc, homeHub.getId()));
         }
 
-        // 3. Generate Trips across shift: 06:00 to 22:00 (16-hour window)
         Instant shiftStart = Instant.parse("2026-10-31T06:00:00Z");
         long shiftSeconds = Duration.ofHours(16).toSeconds();
 
@@ -71,17 +69,14 @@ public class SyntheticDataGenerator {
         for (int t = 1; t <= numTrips; t++) {
             String tripId = "TRIP-" + String.format("%04d", t);
 
-            // Bimodal temporal distribution favoring morning (08:00-11:00) and evening (17:00-20:00) peaks
+            // Bimodal distribution reflecting morning (08:00-11:00) and evening (17:00-20:00) commuter demand
             double r = rng.nextDouble();
             long offsetSeconds;
             if (r < 0.40) {
-                // Morning peak: 2 to 5 hours into shift (08:00 - 11:00)
                 offsetSeconds = (2 * 3600) + Math.round(rng.nextDouble() * 3 * 3600);
             } else if (r < 0.80) {
-                // Evening peak: 11 to 14 hours into shift (17:00 - 20:00)
                 offsetSeconds = (11 * 3600) + Math.round(rng.nextDouble() * 3 * 3600);
             } else {
-                // Off-peak evenly spread across shift
                 offsetSeconds = Math.round(rng.nextDouble() * (shiftSeconds - 3600));
             }
 
@@ -92,7 +87,6 @@ public class SyntheticDataGenerator {
             double roadDist = startLoc.drivingDistanceKm(endLoc);
 
             Duration travelDuration = model.travelDuration(roadDist, tripStartTime);
-            // Allow travel duration + 15 to 30 min buffer for latestFinish
             long bufferSeconds = 900 + rng.nextInt(900);
             Instant latestFinish = tripStartTime.plus(travelDuration).plusSeconds(bufferSeconds);
 

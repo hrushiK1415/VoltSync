@@ -31,7 +31,6 @@ public class ChargerFailureStrategy implements ReplanStrategy {
         long startMs = System.currentTimeMillis();
         Plan plan = context.currentPlan();
 
-        // Mark charger as DOWN
         for (Hub h : context.hubs()) {
             for (Charger c : h.getChargers()) {
                 if (c.getId().equals(brokenChargerId)) {
@@ -56,7 +55,6 @@ public class ChargerFailureStrategy implements ReplanStrategy {
         List<ChargeEvent> newlyScheduledCharges = new ArrayList<>();
         List<ChargeEvent> canceledCharges = new ArrayList<>();
 
-        // Find affected charge sessions across all vehicles
         for (Map.Entry<String, List<Event>> entry : newSchedules.entrySet()) {
             String vehicleId = entry.getKey();
             List<Event> events = entry.getValue();
@@ -65,7 +63,6 @@ public class ChargerFailureStrategy implements ReplanStrategy {
                 Event e = events.get(i);
                 if (e instanceof ChargeEvent ce && ce.getChargerId().equals(brokenChargerId)) {
                     if (ce.getEndTime().isAfter(atTime)) {
-                        // Affected future charging session!
                         modifiedVehicles.add(vehicleId);
                         context.chargerTimeline().cancel(brokenChargerId, ce.getStartTime(), ce.getEndTime());
                         canceledCharges.add(ce);
@@ -73,12 +70,11 @@ public class ChargerFailureStrategy implements ReplanStrategy {
                         Hub hub = hubMap.get(ce.getHubId());
                         boolean relocated = false;
 
-                        // Step (a): Try another UP charger at the SAME hub
+                        // Fallback 1: Relocate session to an alternative functional charger at the same hub
                         if (hub != null) {
                             for (Charger alternative : hub.getChargers()) {
                                 if (alternative.isUp() && !alternative.getId().equals(brokenChargerId)) {
                                     if (context.chargerTimeline().isStallAvailable(alternative.getId(), ce.getStartTime(), ce.getEndTime())) {
-                                        // Found stall at same hub!
                                         ChargeEvent replacement = new ChargeEvent(
                                                 ce.getHubId(), alternative.getId(), ce.getStartTime(), ce.getEndTime(),
                                                 ce.getStartLocation(), ce.getSocFrom(), ce.getSocTo(),
@@ -96,7 +92,7 @@ public class ChargerFailureStrategy implements ReplanStrategy {
                             }
                         }
 
-                        // Step (b): If not relocated at same hub, try finding any slot in the gap
+                        // Fallback 2: Search for any available charging slot within a 15-minute tolerance window
                         if (!relocated && hub != null) {
                             Duration chargeDur = Duration.between(ce.getStartTime(), ce.getEndTime());
                             Optional<ChargerTimeline.AvailableSlot> slotOpt = context.chargerTimeline().findSlot(
@@ -118,8 +114,8 @@ public class ChargerFailureStrategy implements ReplanStrategy {
                             }
                         }
 
+                        // Fallback 3: If charge session cannot be relocated, drop subsequent trips of this vehicle
                         if (!relocated) {
-                            // Step (c): If charge cannot be relocated, drop subsequent trips of this cab
                             List<Event> remainingEvents = new ArrayList<>(events.subList(0, i));
                             for (int k = i; k < events.size(); k++) {
                                 Event dropped = events.get(k);
@@ -142,7 +138,6 @@ public class ChargerFailureStrategy implements ReplanStrategy {
             }
         }
 
-        // Recompute total cost
         double newCost = 0.0;
         for (List<Event> evList : newSchedules.values()) {
             for (Event e : evList) {

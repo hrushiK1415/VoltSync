@@ -25,10 +25,8 @@ public class GreedyLocalSearchSolver implements Solver {
         List<Trip> sortedTrips = new ArrayList<>(input.trips());
         sortedTrips.sort(Comparator.comparing(Trip::getStartTime));
 
-        // 1. Initialize ChargerTimeline
         ChargerTimeline chargerTimeline = new ChargerTimeline();
 
-        // 2. Initialize Cab States
         List<CabState> cabStates = new ArrayList<>();
         for (Vehicle v : input.vehicles()) {
             cabStates.add(new CabState(v));
@@ -36,12 +34,10 @@ public class GreedyLocalSearchSolver implements Solver {
 
         List<UnassignedTrip> unassignedTrips = new ArrayList<>();
 
-        // Precompute lower bound
         LowerBoundCalculator.LowerBoundResult lb = lbCalculator.calculate(
                 input.vehicles(), input.hubs(), input.trips(), input.tariff(), input.consumptionModel()
         );
 
-        // 3. Greedy Construction
         for (Trip trip : sortedTrips) {
             CandidateOption bestOption = null;
             UnassignedReason primaryFailureReason = UnassignedReason.NO_CAB_IN_TIME;
@@ -51,7 +47,6 @@ public class GreedyLocalSearchSolver implements Solver {
             Duration tripDur = input.consumptionModel().travelDuration(trip.getDistanceKm(), trip.getStartTime());
             Instant tripEnd = trip.getStartTime().plus(tripDur);
 
-            // Check trip self-feasibility
             if (tripEnd.isAfter(trip.getLatestFinish())) {
                 unassignedTrips.add(new UnassignedTrip(trip.getId(), UnassignedReason.TIME_WINDOW_INFEASIBLE,
                         "Trip duration (" + tripDur.toMinutes() + "m) exceeds available window"));
@@ -74,7 +69,6 @@ public class GreedyLocalSearchSolver implements Solver {
             }
 
             if (bestOption != null) {
-                // Apply chosen option to cab
                 applyOptionToCab(bestOption, chargerTimeline);
             } else {
                 if (hadCongestion) {
@@ -86,10 +80,8 @@ public class GreedyLocalSearchSolver implements Solver {
             }
         }
 
-        // Build greedy plan
         Plan currentPlan = buildPlanFromCabStates(input.planId(), 1, cabStates, unassignedTrips, lb, input.tariff());
 
-        // 4. Time-Boxed Local Search
         boolean partial = false;
         long remainingTime = deadlineMs - System.currentTimeMillis();
         if (remainingTime > 100) {
@@ -115,7 +107,6 @@ public class GreedyLocalSearchSolver implements Solver {
                                                    ChargerTimeline chargerTimeline) {
         ConsumptionModel model = input.consumptionModel();
 
-        // Check if cab can reach trip origin in time
         double dhToOriginDist = cab.currentLocation.drivingDistanceKm(trip.getStartLoc());
         Duration dhToOriginDur = model.travelDuration(dhToOriginDist, cab.availableTime);
         Instant earliestArrival = cab.availableTime.plus(dhToOriginDur);
@@ -124,11 +115,10 @@ public class GreedyLocalSearchSolver implements Solver {
             return CandidateEvaluation.failed(UnassignedReason.NO_CAB_IN_TIME);
         }
 
-        // Energy calculations
         double eDh = model.calculateEnergy(dhToOriginDist, cab.availableTime);
         double eTrip = model.calculateEnergy(trip.getDistanceKm(), trip.getStartTime());
 
-        // Reserve to nearest hub from trip end
+        // Reserve margin: ensure vehicle retains enough battery after the trip to reach the nearest charging hub
         Hub nearestHubFromTrip = findNearestHub(trip.getEndLoc(), input.hubs());
         double reserveDist = nearestHubFromTrip != null ? trip.getEndLoc().drivingDistanceKm(nearestHubFromTrip.getLocation()) : 0.0;
         double eReserve = model.calculateEnergy(reserveDist, tripEnd);
@@ -136,7 +126,6 @@ public class GreedyLocalSearchSolver implements Solver {
         double totalEnergyNoCharge = eDh + eTrip + eReserve;
         double socDropNoCharge = (totalEnergyNoCharge / cab.vehicle.getBatteryKWh()) * 100.0;
 
-        // Path A: Feasible directly without intermediate charging
         if (cab.currentSoc - socDropNoCharge >= PlanValidator.BATTERY_FLOOR_PERCENT) {
             double score = dhToOriginDist * 1.0;
             CandidateOption opt = new CandidateOption(cab, trip, false, null, null, null,
@@ -144,7 +133,7 @@ public class GreedyLocalSearchSolver implements Solver {
             return CandidateEvaluation.success(opt);
         }
 
-        // Path B: Try inserting a charge session at a hub before the trip
+        // Insufficient SoC: evaluate inserting an intermediate charge session at a hub before trip start
         for (Hub hub : input.hubs()) {
             double dhToHubDist = cab.currentLocation.drivingDistanceKm(hub.getLocation());
             Duration dhToHubDur = model.travelDuration(dhToHubDist, cab.availableTime);
@@ -159,24 +148,23 @@ public class GreedyLocalSearchSolver implements Solver {
                 double socAtHub = cab.currentSoc - (eToHub / cab.vehicle.getBatteryKWh()) * 100.0;
 
                 if (socAtHub < PlanValidator.BATTERY_FLOOR_PERCENT) {
-                    continue; // cannot even reach hub safely
+                    continue;
                 }
 
-                // Energy required after charging: Hub -> Origin -> Trip -> Nearest Hub
+                // Sizing target SoC: cover hub departure, passenger trip, and subsequent return to hub with a 5% safety margin
                 double eAfterCharge = model.calculateEnergy(dhHubToOriginDist, mustLeaveHub) + eTrip + eReserve;
-                double socNeededAfterCharge = PlanValidator.BATTERY_FLOOR_PERCENT + (eAfterCharge / cab.vehicle.getBatteryKWh()) * 100.0 + 5.0; // 5% buffer
+                double socNeededAfterCharge = PlanValidator.BATTERY_FLOOR_PERCENT + (eAfterCharge / cab.vehicle.getBatteryKWh()) * 100.0 + 5.0;
                 double targetSoc = Math.min(85.0, Math.max(socAtHub + 15.0, socNeededAfterCharge));
 
                 if (targetSoc > 100.0) {
                     continue;
                 }
 
-                // Average charger power for initial estimate
                 double estPowerKW = 50.0;
                 Duration chargeDur = ChargingCurve.timeToCharge(socAtHub, targetSoc, cab.vehicle.getBatteryKWh(), estPowerKW);
 
                 if (arriveHub.plus(chargeDur).isAfter(mustLeaveHub)) {
-                    continue; // not enough time to charge
+                    continue;
                 }
 
                 Optional<ChargerTimeline.AvailableSlot> slotOpt = chargerTimeline.findSlot(
@@ -185,7 +173,6 @@ public class GreedyLocalSearchSolver implements Solver {
 
                 if (slotOpt.isPresent()) {
                     ChargerTimeline.AvailableSlot slot = slotOpt.get();
-                    // Refine charging duration with exact charger power
                     Duration exactDur = ChargingCurve.timeToCharge(socAtHub, targetSoc, cab.vehicle.getBatteryKWh(), slot.powerKW());
                     Instant chargeStart = slot.start();
                     Instant chargeEnd = chargeStart.plus(exactDur);
@@ -221,7 +208,6 @@ public class GreedyLocalSearchSolver implements Solver {
             Hub hub = opt.hub();
             ChargerTimeline.AvailableSlot slot = opt.slot();
 
-            // 1. Deadhead to hub (if needed)
             if (opt.dhToHubDist() > PlanValidator.LOCATION_TOLERANCE_KM) {
                 Instant dhStart = cab.availableTime;
                 Instant dhEnd = dhStart.plus(opt.dhToHubDur());
@@ -236,7 +222,6 @@ public class GreedyLocalSearchSolver implements Solver {
                 cab.currentSoc = socAfter;
             }
 
-            // 2. Charging Session
             Instant chargeStart = slot.start().isAfter(cab.availableTime) ? slot.start() : cab.availableTime;
             Instant chargeEnd = chargeStart.plus(opt.chargeDur());
             double socBefore = cab.currentSoc;
@@ -256,7 +241,6 @@ public class GreedyLocalSearchSolver implements Solver {
             cab.availableTime = chargeEnd;
             cab.currentSoc = targetSoc;
 
-            // 3. Deadhead from hub to trip origin
             if (opt.dhHubToOriginDist() > PlanValidator.LOCATION_TOLERANCE_KM) {
                 Instant dhEnd = trip.getStartTime();
                 Instant dhStart = dhEnd.minus(opt.dhHubToOriginDur());
@@ -274,7 +258,6 @@ public class GreedyLocalSearchSolver implements Solver {
                 cab.currentSoc = dhSocAfter;
             }
         } else {
-            // Direct deadhead to trip origin (if needed)
             if (opt.dhToHubDist() > PlanValidator.LOCATION_TOLERANCE_KM) {
                 Instant dhEnd = trip.getStartTime();
                 Instant dhStart = dhEnd.minus(opt.dhToHubDur());
@@ -293,9 +276,8 @@ public class GreedyLocalSearchSolver implements Solver {
             }
         }
 
-        // 4. Trip Event
         double tripEnergy = (trip.getDistanceKm() * cab.vehicle.getConsumptionKWhPerKm());
-        double tripDurationHours = trip.getDistanceKm() / 25.0; // base speed
+        double tripDurationHours = trip.getDistanceKm() / 25.0;
         Instant tripStart = trip.getStartTime();
         Instant tripEnd = tripStart.plusSeconds(Math.max(60, Math.round(tripDurationHours * 3600.0)));
         if (tripEnd.isAfter(trip.getLatestFinish())) {
@@ -320,8 +302,7 @@ public class GreedyLocalSearchSolver implements Solver {
         double bestCost = basePlan.getCost();
         int bestUnassigned = basePlan.getUnassigned().size();
 
-        // Charge Shifting Optimization:
-        // Try shifting charging sessions into off-peak windows where slack exists
+        // Local search: shift charging sessions into earlier off-peak windows where slack exists
         Map<String, List<Event>> schedules = new HashMap<>();
         for (Map.Entry<String, List<Event>> entry : bestPlan.getCabSchedules().entrySet()) {
             schedules.put(entry.getKey(), new ArrayList<>(entry.getValue()));
@@ -335,7 +316,6 @@ public class GreedyLocalSearchSolver implements Solver {
             for (int i = 0; i < events.size(); i++) {
                 if (events.get(i) instanceof ChargeEvent ce) {
                     if (input.tariff().isPeak(ce.getStartTime())) {
-                        // Check if we can shift earlier into off-peak
                         Instant prevEnd = (i > 0) ? events.get(i - 1).getEndTime() : ce.getStartTime().minus(Duration.ofHours(2));
                         Duration chargeDur = Duration.between(ce.getStartTime(), ce.getEndTime());
                         Instant candidateStart = prevEnd;

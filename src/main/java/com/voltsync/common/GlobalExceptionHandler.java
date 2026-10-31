@@ -41,6 +41,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLock(org.springframework.dao.OptimisticLockingFailureException ex) {
+        String traceId = getOrCreateTraceId();
+        log.warn("Optimistic lock conflict [traceId={}]: {}", traceId, ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                ErrorCode.CONCURRENT_MODIFICATION.getCode(),
+                "Plan version conflict: another re-plan was applied concurrently. Please re-query the latest plan.",
+                traceId
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneralException(Exception ex) {
         String traceId = getOrCreateTraceId();

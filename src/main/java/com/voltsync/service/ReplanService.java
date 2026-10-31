@@ -80,7 +80,7 @@ public class ReplanService {
                 vehicles, hubs, trips, Tariff.defaultTariff(), ConsumptionModel.defaultModel(), timeline
         );
 
-        planningService.updatePlan(result.plan());
+        planningService.updatePlan(result.plan(), result.diff().baseVersion());
 
         try {
             String diffJson = objectMapper.writeValueAsString(result.diff());
@@ -120,7 +120,7 @@ public class ReplanService {
                 vehicles, hubs, trips, Tariff.defaultTariff(), ConsumptionModel.defaultModel(), timeline
         );
 
-        planningService.updatePlan(result.plan());
+        planningService.updatePlan(result.plan(), result.diff().baseVersion());
 
         try {
             String diffJson = objectMapper.writeValueAsString(result.diff());

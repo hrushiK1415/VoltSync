@@ -141,16 +141,31 @@ public class PlanningService {
 
     @CachePut(value = "plans", key = "#plan.planId")
     public Plan updatePlan(Plan plan) {
+        return updatePlan(plan, plan.getVersion() - 1);
+    }
+
+    @CachePut(value = "plans", key = "#plan.planId")
+    public synchronized Plan updatePlan(Plan plan, long expectedBaseVersion) {
+        PlanEntity entity = planRepository.findById(plan.getPlanId())
+                .orElseThrow(() -> new AppException(ErrorCode.PLAN_NOT_FOUND, "Plan " + plan.getPlanId() + " not found"));
+
+        // Optimistic locking: reject stale re-plan requests if current DB version has advanced past expected base
+        if (entity.getVersion() != expectedBaseVersion) {
+            throw new AppException(
+                    ErrorCode.CONCURRENT_MODIFICATION,
+                    "Plan version mismatch: expected base version " + expectedBaseVersion +
+                            " but database version is " + entity.getVersion()
+            );
+        }
+
         try {
             String json = objectMapper.writeValueAsString(plan);
-            PlanEntity entity = planRepository.findById(plan.getPlanId())
-                    .orElse(new PlanEntity(plan.getPlanId(), plan.getVersion(), plan.getCost(), plan.getLowerBound(), plan.getUnassigned().size(), json));
             entity.setVersion(plan.getVersion());
             entity.setCost(plan.getCost());
             entity.setLowerBound(plan.getLowerBound());
             entity.setUnassignedCount(plan.getUnassigned().size());
             entity.setPlanJson(json);
-            planRepository.save(entity);
+            planRepository.saveAndFlush(entity);
             return plan;
         } catch (JsonProcessingException e) {
             throw new AppException(ErrorCode.INTERNAL_ERROR, "Failed to serialize plan", e);

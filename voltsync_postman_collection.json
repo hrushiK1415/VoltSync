@@ -1,0 +1,304 @@
+{
+  "info": {
+    "name": "VoltSync API - EV Fleet Charging & Trip Assignment",
+    "_postman_id": "a91b4028-d890-449e-b9e7-492931a29281",
+    "description": "Comprehensive Postman collection for VoltSync EV Fleet Management platform (MoveInSync Backend Assessment - Advanced Track Case Study 6). Includes shift solving, physical constraint audits, explainability timelines, live battery drift re-planning, charger failure relocation, and error scenarios.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "planId",
+      "value": "PLAN-DEMO",
+      "type": "string"
+    },
+    {
+      "key": "tenantId",
+      "value": "TENANT_CORP_1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Observability & Health",
+      "item": [
+        {
+          "name": "Health Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "health"]
+            }
+          }
+        },
+        {
+          "name": "Solver Duration Metric",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/metrics/voltsync.solver.duration",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "metrics", "voltsync.solver.duration"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Fleet Setup",
+      "item": [
+        {
+          "name": "Ingest Charging Hubs & Chargers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"id\": \"HUB_EAST\",\n    \"tenantId\": \"{{tenantId}}\",\n    \"lat\": 12.9716,\n    \"lng\": 77.5946,\n    \"chargers\": [\n      {\"id\": \"CH_E1\", \"powerKW\": 50.0, \"status\": \"UP\"},\n      {\"id\": \"CH_E2\", \"powerKW\": 50.0, \"status\": \"UP\"}\n    ]\n  }\n]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/fleet/hubs",
+              "host": ["{{baseUrl}}"],
+              "path": ["fleet", "hubs"]
+            }
+          }
+        },
+        {
+          "name": "Ingest Electric Vehicles",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"id\": \"CAB_EV_101\",\n    \"tenantId\": \"{{tenantId}}\",\n    \"batteryKWh\": 60.0,\n    \"socPct\": 90.0,\n    \"consumptionKWhPerKm\": 0.18,\n    \"lat\": 12.9716,\n    \"lng\": 77.5946,\n    \"hubId\": \"HUB_EAST\"\n  },\n  {\n    \"id\": \"CAB_EV_102\",\n    \"tenantId\": \"{{tenantId}}\",\n    \"batteryKWh\": 60.0,\n    \"socPct\": 85.0,\n    \"consumptionKWhPerKm\": 0.18,\n    \"lat\": 12.9716,\n    \"lng\": 77.5946,\n    \"hubId\": \"HUB_EAST\"\n  }\n]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/fleet/vehicles",
+              "host": ["{{baseUrl}}"],
+              "path": ["fleet", "vehicles"]
+            }
+          }
+        },
+        {
+          "name": "Ingest Shift Commuter Trips",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"id\": \"TRIP_201\",\n    \"tenantId\": \"{{tenantId}}\",\n    \"startTime\": \"2026-10-31T08:00:00Z\",\n    \"startLat\": 12.9716,\n    \"startLng\": 77.5946,\n    \"endLat\": 12.9352,\n    \"endLng\": 77.6245,\n    \"distanceKm\": 8.5,\n    \"latestFinish\": \"2026-10-31T08:45:00Z\"\n  },\n  {\n    \"id\": \"TRIP_202\",\n    \"tenantId\": \"{{tenantId}}\",\n    \"startTime\": \"2026-10-31T09:00:00Z\",\n    \"startLat\": 12.9352,\n    \"startLng\": 77.6245,\n    \"endLat\": 12.9141,\n    \"endLng\": 77.6109,\n    \"distanceKm\": 6.0,\n    \"latestFinish\": \"2026-10-31T09:40:00Z\"\n  }\n]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trips",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Shift Optimization & Planning",
+      "item": [
+        {
+          "name": "Solve Shift Plan (Greedy + 2-Opt)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"timeBudgetSeconds\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/plans",
+              "host": ["{{baseUrl}}"],
+              "path": ["plans"]
+            }
+          }
+        },
+        {
+          "name": "Get Plan By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/plans/{{planId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["plans", "{{planId}}"]
+            }
+          }
+        },
+        {
+          "name": "Validate Plan (Audit Hard Constraints)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/plans/{{planId}}/validation",
+              "host": ["{{baseUrl}}"],
+              "path": ["plans", "{{planId}}", "validation"]
+            }
+          }
+        },
+        {
+          "name": "Explainability - Unassigned Trips",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/plans/{{planId}}/unassigned",
+              "host": ["{{baseUrl}}"],
+              "path": ["plans", "{{planId}}", "unassigned"]
+            }
+          }
+        },
+        {
+          "name": "Explainability - Per-Cab Timeline",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/plans/{{planId}}/vehicles/CAB_EV_101/timeline",
+              "host": ["{{baseUrl}}"],
+              "path": ["plans", "{{planId}}", "vehicles", "CAB_EV_101", "timeline"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Live Re-Planning & Failure Handling",
+      "item": [
+        {
+          "name": "Battery Drift Event (22% Actual Arrival SoC)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"EVT-DRIFT-POSTMAN-1\",\n  \"vehicleId\": \"CAB_EV_101\",\n  \"soc\": 22.0,\n  \"at\": \"2026-10-31T08:50:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/plans/{{planId}}/events/battery-drift",
+              "host": ["{{baseUrl}}"],
+              "path": ["plans", "{{planId}}", "events", "battery-drift"]
+            }
+          }
+        },
+        {
+          "name": "Idempotent Retry of Battery Drift Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"EVT-DRIFT-POSTMAN-1\",\n  \"vehicleId\": \"CAB_EV_101\",\n  \"soc\": 22.0,\n  \"at\": \"2026-10-31T08:50:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/plans/{{planId}}/events/battery-drift",
+              "host": ["{{baseUrl}}"],
+              "path": ["plans", "{{planId}}", "events", "battery-drift"]
+            }
+          }
+        },
+        {
+          "name": "Charger Breakdown Event (Relocate Sessions)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"EVT-CHARGER-FAIL-1\",\n  \"chargerId\": \"CH_E1\",\n  \"at\": \"2026-10-31T08:55:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/plans/{{planId}}/events/charger-failure",
+              "host": ["{{baseUrl}}"],
+              "path": ["plans", "{{planId}}", "events", "charger-failure"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Error Handling & Guardrails",
+      "item": [
+        {
+          "name": "Plan Not Found (HTTP 404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/plans/NON_EXISTENT_PLAN_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["plans", "NON_EXISTENT_PLAN_ID"]
+            }
+          }
+        },
+        {
+          "name": "Out-of-Order Telemetry (HTTP 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"EVT-OUT-OF-ORDER\",\n  \"vehicleId\": \"CAB_EV_101\",\n  \"soc\": 80.0,\n  \"at\": \"2026-10-31T07:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/plans/{{planId}}/events/battery-drift",
+              "host": ["{{baseUrl}}"],
+              "path": ["plans", "{{planId}}", "events", "battery-drift"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

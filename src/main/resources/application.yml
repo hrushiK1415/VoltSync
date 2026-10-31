@@ -1,0 +1,45 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: voltsync
+  profiles:
+    active: default
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/voltsync}
+    username: ${SPRING_DATASOURCE_USERNAME:voltsync}
+    password: ${SPRING_DATASOURCE_PASSWORD:voltsync}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+    show-sql: false
+  cache:
+    type: caffeine
+    cache-names:
+      - plans
+      - hubMetadata
+      - chargerMetadata
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] %logger{36} [traceId=%X{traceId:-}, planId=%X{planId:-}] - %msg%n"

@@ -41,7 +41,7 @@ public class GreedyLocalSearchSolver implements Solver {
                 input.vehicles(), input.hubs(), input.trips(), input.tariff(), input.consumptionModel()
         );
 
-        // 3. Greedy Construction Phase
+        // 3. Greedy Construction
         for (Trip trip : sortedTrips) {
             CandidateOption bestOption = null;
             UnassignedReason primaryFailureReason = UnassignedReason.NO_CAB_IN_TIME;
@@ -89,7 +89,7 @@ public class GreedyLocalSearchSolver implements Solver {
         // Build greedy plan
         Plan currentPlan = buildPlanFromCabStates(input.planId(), 1, cabStates, unassignedTrips, lb, input.tariff());
 
-        // 4. Time-Boxed Local Search Phase
+        // 4. Time-Boxed Local Search
         boolean partial = false;
         long remainingTime = deadlineMs - System.currentTimeMillis();
         if (remainingTime > 100) {

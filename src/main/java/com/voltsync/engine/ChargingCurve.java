@@ -89,7 +89,7 @@ public final class ChargingCurve {
         double powerFast = powerKW;
         double powerSlow = powerKW * TAPER_POWER_FACTOR;
 
-        // Phase 1: fast charging up to knee point (80%)
+        // Fast charging up to knee point (80%)
         if (currentSoc < SOC_KNEE_PCT) {
             double hoursToKnee = ((SOC_KNEE_PCT - currentSoc) * batteryKWh) / (100.0 * powerFast);
             if (remainingHours <= hoursToKnee) {
@@ -101,7 +101,7 @@ public final class ChargingCurve {
             remainingHours -= hoursToKnee;
         }
 
-        // Phase 2: slow taper charging above knee point (80% to 100%)
+        // Slow taper charging above knee point (80% to 100%)
         if (remainingHours > 0.0 && currentSoc < 100.0) {
             double deltaSoc = (remainingHours * 100.0 * powerSlow) / batteryKWh;
             currentSoc = Math.min(100.0, currentSoc + deltaSoc);
